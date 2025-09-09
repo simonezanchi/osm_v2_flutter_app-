@@ -36,6 +36,7 @@ dependencies:
 
   # ... other dependencies like cupertino_icons
   cupertino_icons: ^1.0.2
+  supabase_flutter: ^2.10.0
 
 
 

@@ -1,10 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart'; // For LatLng
+import 'package:latlong2/latlong.dart';
 import 'dart:async';
-import 'package:geolocator/geolocator.dart'; // For Geolocator
+import 'package:geolocator/geolocator.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(
+    url: 'https://wtxhengrdveaheaqeyzq.supabase.co',        // sostituisci con il tuo URL Supabase
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0eGhlbmdyZHZlYWhlYXFleXpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MTI2NTMsImV4cCI6MjA3Mjk4ODY1M30.OFBAi-_50p26dPeQQ6H_t3iltxDGts8k_vgmJKBFxK8',// sostituisci con la tua chiave anon
+  );
+
   runApp(const MyApp());
 }
 
@@ -14,12 +21,12 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'OpenStreetMap Demo', // Changed title
+      title: 'OpenStreetMap Demo',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue), // Changed seed color for variety
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
         useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Sticker Demo'), // Changed title
+      home: const MyHomePage(title: 'Sticker Demo'),
     );
   }
 }
@@ -36,8 +43,15 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> {
   bool _showMessage = false;
   Timer? _messageTimer;
-  LatLng? _currentDeviceLocation; // Per memorizzare la posizione del dispositivo
-  final MapController _mapController = MapController(); // Controller per la mappa
+  LatLng? _currentDeviceLocation;
+  final MapController _mapController = MapController();
+  List<Map<String, dynamic>> _locations = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadLocations();
+  }
 
   @override
   void dispose() {
@@ -59,77 +73,79 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
-  // --- NUOVO METODO PER LA POSIZIONE ---
   Future<void> _determineAndGoToCurrentPosition() async {
     bool serviceEnabled;
     LocationPermission permission;
 
-    // 1. Controlla se il servizio di localizzazione è abilitato sul dispositivo.
     serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      // Il servizio di localizzazione non è abilitato.
-      // Mostra un messaggio all'utente o chiedi di abilitarlo.
-      if (mounted) { // mounted check
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Il servizio di localizzazione è disabilitato. Abilitalo per continuare.')));
+            content: Text(
+                'Il servizio di localizzazione è disabilitato. Abilitalo per continuare.')));
       }
-      return; // Non possiamo continuare
+      return;
     }
 
-    // 2. Controlla i permessi attuali.
     permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
-      // I permessi sono negati, richiedili.
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) {
-        // L'utente ha negato i permessi. Gestisci la situazione.
-        if (mounted) { // mounted check
-          ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Permessi di localizzazione negati.')));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Permessi di localizzazione negati.')));
         }
         return;
       }
     }
 
     if (permission == LocationPermission.deniedForever) {
-      // I permessi sono negati permanentemente. L'utente deve abilitarli
-      // manualmente dalle impostazioni dell'app.
-      if (mounted) { // mounted check
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Permessi di localizzazione negati permanentemente. Apri le impostazioni per abilitarli.')));
+            content: Text(
+                'Permessi di localizzazione negati permanentemente. Apri le impostazioni per abilitarli.')));
       }
-      // Potresti anche aggiungere un pulsante per aprire le impostazioni dell'app:
-      // await Geolocator.openAppSettings();
       return;
     }
 
-    // 3. Se arriviamo qui, i permessi sono concessi. Ottieni la posizione.
     try {
       Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high); // Puoi scegliere l'accuratezza
+          desiredAccuracy: LocationAccuracy.high);
 
       setState(() {
         _currentDeviceLocation = LatLng(position.latitude, position.longitude);
       });
 
-      // Muovi la mappa alla nuova posizione
       if (_currentDeviceLocation != null) {
-        _mapController.move(_currentDeviceLocation!, 15.0); // 15.0 è un esempio di zoom
-        if (mounted) { // mounted check
+        _mapController.move(_currentDeviceLocation!, 15.0);
+        if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text('Posizione trovata: Lat: ${_currentDeviceLocation!.latitude}, Lng: ${_currentDeviceLocation!.longitude}')));
+              content: Text(
+                  'Posizione trovata: Lat: ${_currentDeviceLocation!.latitude}, Lng: ${_currentDeviceLocation!.longitude}')));
         }
       }
-
     } catch (e) {
-      if (mounted) { // mounted check
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Errore nel recuperare la posizione: $e')));
       }
       print('Errore nel recuperare la posizione: $e');
     }
   }
-  // --- FINE NUOVO METODO PER LA POSIZIONE ---
+
+  Future<void> _loadLocations() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('locations')
+          .select();
+      setState(() {
+        _locations = List<Map<String, dynamic>>.from(data);
+      });
+      print('Dati caricati dal DB: $_locations');
+    } catch (e) {
+      print('Errore fetch locations: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -137,11 +153,16 @@ class _MyHomePageState extends State<MyHomePage> {
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
-        actions: [ // Aggiungiamo un pulsante per ottenere la posizione nella AppBar
+        actions: [
           IconButton(
             icon: const Icon(Icons.my_location),
             tooltip: 'Trova la mia posizione',
             onPressed: _determineAndGoToCurrentPosition,
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Aggiorna marker',
+            onPressed: _loadLocations,
           ),
         ],
         toolbarHeight: 40.0,
@@ -149,10 +170,11 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Stack(
         children: <Widget>[
           FlutterMap(
-            mapController: _mapController, // Assegna il controller alla mappa
+            mapController: _mapController,
             options: MapOptions(
-              initialCenter: _currentDeviceLocation ?? const LatLng(51.509865, -0.118092), // Usa la posizione corrente se disponibile, altrimenti default
-              initialZoom: _currentDeviceLocation != null ? 15.0 : 9.2, // Zoom diverso se la posizione è nota
+              initialCenter: _currentDeviceLocation ??
+                  const LatLng(45.6983, 9.6773), // default Bergamo
+              initialZoom: _currentDeviceLocation != null ? 15.0 : 9.2,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.drag | InteractiveFlag.pinchZoom,
               ),
@@ -162,23 +184,82 @@ class _MyHomePageState extends State<MyHomePage> {
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                 userAgentPackageName: 'simone.zanchi.osm_v2',
               ),
-              if (_currentDeviceLocation != null) // Mostra un marcatore sulla posizione corrente
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: _currentDeviceLocation!,
-                      width: 80,
-                      height: 80,
-                      child: const Icon(Icons.location_on, color: Colors.red, size: 40),
+              MarkerLayer(
+                markers: _locations.map<Marker>((loc) {
+                  return Marker(
+                    point: LatLng(
+                      double.parse(loc['lat'].toString()),
+                      double.parse(loc['long'].toString()),
                     ),
-                  ],
-                ),
+                    width: 80,
+                    height: 80,
+                    child: GestureDetector(
+                      onTap: () {
+                        showDialog(
+                          context: context,
+                          builder: (context) => Dialog(
+                            backgroundColor: Colors.transparent,
+                            insetPadding: EdgeInsets.all(10),
+                            child: Stack(
+                              children: [
+                                ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Image.network(
+                                    loc['image_url'],
+                                    fit: BoxFit.contain,
+                                  ),
+                                ),
+                                Positioned(
+                                  top: 8,
+                                  left: 8,
+                                  right: 8,
+                                  child: Container(
+                                    color: Colors.black54,
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 4, horizontal: 8),
+                                    child: Text(
+                                      loc['name'] ?? '',
+                                      style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  bottom: 8,
+                                  right: 8,
+                                  child: SizedBox(
+                                    width: 120, // più grande
+                                    height: 120, // più grande
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(8),
+                                      child: Image.network(
+                                        loc['sticker_url'] ?? '',
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                      child: const Icon(Icons.location_on,
+                          color: Colors.blue, size: 40),
+                    ),
+                  );
+                }).toList(),
+              ),
             ],
           ),
           if (_showMessage)
             Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.black.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(8),
@@ -200,4 +281,3 @@ class _MyHomePageState extends State<MyHomePage> {
     );
   }
 }
-
