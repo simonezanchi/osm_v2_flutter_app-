@@ -9,7 +9,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Supabase.initialize(
     url: 'https://wtxhengrdveaheaqeyzq.supabase.co',        // sostituisci con il tuo URL Supabase
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0eGhlbmdyZHZlYWhlYXFleXpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MTI2NTMsImV4cCI6MjA3Mjk4ODY1M30.OFBAi-_50p26dPeQQ6H_t3iltxDGts8k_vgmJKBFxK8',// sostituisci con la tua chiave anon
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Ind0eGhlbmdyZHZlYWhlYXFleXpxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTc0MTI2NTMsImV4cCI6MjA3Mjk4ODY1M30.OFBAi-_50p26dPeQQ6H_t3iltxDGts8k_vgmJKBFxK8', // sostituisci con la tua chiave anon
   );
 
   runApp(const MyApp());
@@ -47,15 +47,24 @@ class _MyHomePageState extends State<MyHomePage> {
   final MapController _mapController = MapController();
   List<Map<String, dynamic>> _locations = [];
 
+  // Supabase Auth
+  User? _currentUser;
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  String? _errorMessage;
+
   @override
   void initState() {
     super.initState();
     _loadLocations();
+    _currentUser = Supabase.instance.client.auth.currentUser;
   }
 
   @override
   void dispose() {
     _messageTimer?.cancel();
+    _emailController.dispose();
+    _passwordController.dispose();
     super.dispose();
   }
 
@@ -147,6 +156,89 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
+  Future<void> _signIn() async {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = "Email e password richieste";
+      });
+      return;
+    }
+
+    try {
+      final response = await Supabase.instance.client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      if (response.user != null) {
+        setState(() {
+          _currentUser = response.user;
+        });
+      } else {
+        setState(() {
+          _errorMessage = "Login fallito";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  Future<void> _signUp() async {
+    setState(() {
+      _errorMessage = null;
+    });
+
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() {
+        _errorMessage = "Email e password richieste";
+      });
+      return;
+    }
+
+    try {
+      final response = await Supabase.instance.client.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      if (response.user != null) {
+        setState(() {
+          _currentUser = response.user;
+        });
+      } else {
+        setState(() {
+          _errorMessage = "Signup fallito";
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _errorMessage = e.toString();
+      });
+    }
+  }
+
+  Future<void> _signOut() async {
+    await Supabase.instance.client.auth.signOut();
+    setState(() {
+      _currentUser = null;
+      _emailController.clear();
+      _passwordController.clear();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -154,6 +246,21 @@ class _MyHomePageState extends State<MyHomePage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: Text(widget.title),
         actions: [
+          if (_currentUser != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Center(
+                  child: Text(
+                    'Ciao, ${_currentUser!.email}',
+                    style: const TextStyle(fontSize: 16),
+                  )),
+            ),
+          if (_currentUser != null)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Logout',
+              onPressed: _signOut,
+            ),
           IconButton(
             icon: const Icon(Icons.my_location),
             tooltip: 'Trova la mia posizione',
@@ -231,8 +338,8 @@ class _MyHomePageState extends State<MyHomePage> {
                                   bottom: 8,
                                   right: 8,
                                   child: SizedBox(
-                                    width: 120, // più grande
-                                    height: 120, // più grande
+                                    width: 120,
+                                    height: 120,
                                     child: ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
                                       child: Image.network(
@@ -255,6 +362,62 @@ class _MyHomePageState extends State<MyHomePage> {
               ),
             ],
           ),
+
+          // Form Login / Signup
+          if (_currentUser == null)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                margin: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.95),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: _emailController,
+                      decoration: const InputDecoration(
+                        labelText: 'Email',
+                      ),
+                      keyboardType: TextInputType.emailAddress,
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _passwordController,
+                      decoration: const InputDecoration(
+                        labelText: 'Password',
+                      ),
+                      obscureText: true,
+                    ),
+                    if (_errorMessage != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        _errorMessage!,
+                        style: const TextStyle(color: Colors.red),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                      children: [
+                        ElevatedButton(
+                          onPressed: _signIn,
+                          child: const Text('Login'),
+                        ),
+                        ElevatedButton(
+                          onPressed: _signUp,
+                          child: const Text('Signup'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           if (_showMessage)
             Center(
               child: Container(
